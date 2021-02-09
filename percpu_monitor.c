@@ -110,180 +110,6 @@ static u64 get_iowait_time(struct kernel_cpustat *kcs, int cpu)
 
 #endif
 
-static int show_hist(struct seq_file *p, void *v, vsmall_ring_buffer_t *phis)
-{
-    u8 c;
-    u16 index;
-
-    c = phis->rear;
-    /* 瞬时值 */
-    if (likely(phis->accum_times)) {
-        if (likely(phis->accum_val)) {
-            seq_put_decimal_ull(p, SEQ_DELIM_SPACE,
-                (unsigned long long) (phis->accum_val / phis->accum_times));
-        } else {
-            seq_printf(p, " 0");
-        }
-    } else {
-        seq_put_decimal_ull(p, SEQ_DELIM_SPACE, (unsigned long long) phis->buffer[c]);
-    }
-
-    /* 历史值 */
-    for (index = 0; index < phis->cnt; index++) {
-        seq_put_decimal_ull(p, SEQ_DELIM_SPACE, (unsigned long long) phis->buffer[c]);
-        if (unlikely(c == 0)) {
-            c = phis->size - 1;
-        } else {
-            c--;
-        }
-    }
-
-    for (; index < phis->size; index++)
-        seq_printf(p, " 0");
-    seq_putc(p, '\n');
-
-    return 0;
-}
-
-static int show_hist_filed(struct seq_file *p, void *v, unsigned long off)
-{
-    unsigned int i;
-
-    read_lock(&cpu_stat->rwlock);
-    for_each_online_cpu(i) {
-        seq_printf(p, "%d", i);
-        show_hist(p, v, (vsmall_ring_buffer_t *) ((void *) &cpu_stat->core[i] + off));
-    }
-    read_unlock(&cpu_stat->rwlock);
-
-    return 0;
-}
-
-static int show_rt_with_off(struct seq_file *p, void *v, const unsigned off)
-{
-    unsigned int i;
-    vsmall_ring_buffer_t *phis;
-
-    read_lock(&cpu_stat->rwlock);
-    for_each_online_cpu(i) {
-        phis = (vsmall_ring_buffer_t *) ((void *) &cpu_stat->core[i] + off);
-        seq_printf(p, "%d", i);
-        seq_put_decimal_ull(p, SEQ_DELIM_SPACE, (unsigned long long) phis->sum / phis->cnt);
-        seq_putc(p, '\n');
-    }
-    read_unlock(&cpu_stat->rwlock);
-
-    return 0;
-}
-
-static int show_rt_1min(struct seq_file *p, void *v)
-{
-    return show_rt_with_off(p, v, offsetof(struct single_cpu_stat_history, hist.h_1min));
-}
-
-static int show_rt_5min(struct seq_file *p, void *v)
-{
-    return show_rt_with_off(p, v, offsetof(struct single_cpu_stat_history, rt_5min));
-}
-
-static int show_hist_1min(struct seq_file *p, void *v)
-{
-    return show_hist_filed(p, v, offsetof(struct single_cpu_stat_history, hist.h_1min));
-}
-
-static int show_hist_5min(struct seq_file *p, void *v)
-{
-    return show_hist_filed(p, v, offsetof(struct single_cpu_stat_history, hist.h_5min));
-}
-
-static int show_hist_1hour(struct seq_file *p, void *v)
-{
-    return show_hist_filed(p, v, offsetof(struct single_cpu_stat_history, hist.h_1hour));
-}
-
-static int show_hist_1day(struct seq_file *p, void *v)
-{
-    return show_hist_filed(p, v, offsetof(struct single_cpu_stat_history, hist.h_1day));
-}
-
-static int stat_rt_1min_open(struct inode *inode, struct file *file)
-{
-    return single_open_size(file, show_rt_1min, NULL, 8 * num_online_cpus());
-}
-
-static int stat_rt_5min_open(struct inode *inode, struct file *file)
-{
-    return single_open_size(file, show_rt_5min, NULL, 8 * num_online_cpus());
-}
-
-static int stat_hist_1min_open(struct inode *inode, struct file *file)
-{
-    return single_open_size(file, show_hist_1min, NULL, 128 * num_online_cpus());
-}
-
-static int stat_hist_5min_open(struct inode *inode, struct file *file)
-{
-    return single_open_size(file, show_hist_5min, NULL, 128 * num_online_cpus());
-}
-
-static int stat_hist_1hour_open(struct inode *inode, struct file *file)
-{
-    return single_open_size(file, show_hist_1hour, NULL, 128 * num_online_cpus());
-}
-
-static int stat_hist_1day_open(struct inode *inode, struct file *file)
-{
-    return single_open_size(file, show_hist_1day, NULL, 160 * num_online_cpus());
-}
-
-static const struct file_operations rt_1min_proc_ops = {
-    .owner   = THIS_MODULE,
-    .open    = stat_rt_1min_open,
-    .read    = seq_read,
-    .llseek  = seq_lseek,
-    .release = single_release,
-};
-
-static const struct file_operations rt_5min_proc_ops = {
-    .owner   = THIS_MODULE,
-    .open    = stat_rt_5min_open,
-    .read    = seq_read,
-    .llseek  = seq_lseek,
-    .release = single_release,
-};
-
-static const struct file_operations stat_hist_1min_proc_ops = {
-    .owner   = THIS_MODULE,
-    .open    = stat_hist_1min_open,
-    .read    = seq_read,
-    .llseek  = seq_lseek,
-    .release = single_release,
-};
-
-static const struct file_operations hist_5min_proc_ops = {
-    .owner   = THIS_MODULE,
-    .open    = stat_hist_5min_open,
-    .read    = seq_read,
-    .llseek  = seq_lseek,
-    .release = single_release,
-};
-
-static const struct file_operations hist_1hour_proc_ops = {
-    .owner   = THIS_MODULE,
-    .open    = stat_hist_1hour_open,
-    .read    = seq_read,
-    .llseek  = seq_lseek,
-    .release = single_release,
-};
-
-static const struct file_operations hist_1day_proc_ops = {
-    .owner   = THIS_MODULE,
-    .open    = stat_hist_1day_open,
-    .read    = seq_read,
-    .llseek  = seq_lseek,
-    .release = single_release,
-};
-
 void cpu_stat_update(void)
 {
     int i;
@@ -340,17 +166,108 @@ void cpu_stat_update(void)
             + last->guest_nice;
         core->total = busy + last->idle + last->iowait + last->steal;
 
-        if (unlikely(core->total == 0 || busy == 0)) {
-            res = 0;
-        } else {
+        res = 0;
+        if (likely(core->total && busy))
             res = (u16) div64_u64(busy * 100 * 100, core->total);
-        }
 
         history_record_update(&core->hist, res);
         (void) vsmall_ring_buffer_add(vsmall_ring_buffer_ptr(core->rt_5min), res);
     }
     write_unlock(&cpu_stat->rwlock);
 }
+
+static int show_rt(struct seq_file *p, void *v)
+{
+    unsigned int i;
+    unsigned long off;
+    vsmall_ring_buffer_t *phis;
+
+    off = (unsigned long) p->private;
+    read_lock(&cpu_stat->rwlock);
+    for_each_online_cpu(i) {
+        phis = (vsmall_ring_buffer_t *) ((void *) &cpu_stat->core[i] + off);
+        seq_printf(p, "%d", i);
+        seq_put_decimal_ull(p, SEQ_DELIM_SPACE, (unsigned long long) phis->sum / phis->cnt);
+        seq_putc(p, '\n');
+    }
+    read_unlock(&cpu_stat->rwlock);
+
+    return 0;
+}
+
+static int do_show_his(struct seq_file *__restrict p, const vsmall_ring_buffer_t *__restrict phis)
+{
+    u8 c;
+    u16 index;
+
+    c = phis->rear;
+    /* 瞬时值 */
+    if (likely(phis->accum_times)) {
+        if (likely(phis->accum_val)) {
+            seq_put_decimal_ull(p, SEQ_DELIM_SPACE,
+                (unsigned long long) (phis->accum_val / phis->accum_times));
+        } else {
+            seq_printf(p, " 0");
+        }
+    } else {
+        seq_put_decimal_ull(p, SEQ_DELIM_SPACE, (unsigned long long) phis->buffer[c]);
+    }
+
+    for (index = 0; index < phis->cnt; index++) {
+        seq_put_decimal_ull(p, SEQ_DELIM_SPACE, (unsigned long long) phis->buffer[c]);
+        if (unlikely(c == 0))
+            c = phis->size;
+        c--;
+    }
+
+    for (; index < phis->size; index++)
+        seq_printf(p, " 0");
+    seq_putc(p, '\n');
+
+    return 0;
+}
+
+static int show_hist(struct seq_file *p, void *v)
+{
+    unsigned int i;
+    unsigned long off;
+
+    off = (unsigned long) p->private;
+    read_lock(&cpu_stat->rwlock);
+    for_each_online_cpu(i) {
+        seq_printf(p, "%d", i);
+        do_show_his(p, (vsmall_ring_buffer_t *) ((void *) &cpu_stat->core[i] + off));
+    }
+    read_unlock(&cpu_stat->rwlock);
+
+    return 0;
+}
+
+static int rt_open(struct inode *inode, struct file *file)
+{
+    return single_open_size(file, show_rt, PDE_DATA(inode), 8 * num_online_cpus());
+}
+
+static int hist_open(struct inode *inode, struct file *file)
+{
+    return single_open_size(file, show_hist, PDE_DATA(inode), 160 * num_online_cpus());
+}
+
+static const struct file_operations rt_proc_ops = {
+    .owner   = THIS_MODULE,
+    .open    = rt_open,
+    .read    = seq_read,
+    .llseek  = seq_lseek,
+    .release = single_release,
+};
+
+static const struct file_operations hist_proc_ops = {
+    .owner   = THIS_MODULE,
+    .open    = hist_open,
+    .read    = seq_read,
+    .llseek  = seq_lseek,
+    .release = single_release,
+};
 
 int cpu_stat_init(void)
 {
@@ -381,37 +298,43 @@ int cpu_stat_init(void)
         vsmall_ring_buffer_init(cpu_stat->core[size].rt_5min, 1);
     }
 
-    entry = proc_create(MONITOR_PROC_HIST_1MIN, 0444, entry_root, &stat_hist_1min_proc_ops);
-    if (unlikely(!entry)) {
-        path = MONITOR_PROC_HIST_1MIN_PERCPU;
-        goto err;
-    }
-
-    entry = proc_create(MONITOR_PROC_RT_1MIN, 0444, entry_root, &rt_1min_proc_ops);
+    entry = proc_create_data(MONITOR_PROC_RT_1MIN, 0444, entry_root, &rt_proc_ops,
+        (void *) offsetof(struct single_cpu_stat_history, hist.h_1min));
     if (unlikely(!entry)) {
         path = MONITOR_PROC_RT_1MIN_PERCPU;
         goto err;
     }
 
-    entry = proc_create(MONITOR_PROC_RT_5MIN, 0444, entry_root, &rt_5min_proc_ops);
+    entry = proc_create_data(MONITOR_PROC_RT_5MIN, 0444, entry_root, &rt_proc_ops,
+        (void *) offsetof(struct single_cpu_stat_history, rt_5min));
     if (unlikely(!entry)) {
         path = MONITOR_PROC_RT_5MIN_PERCPU;
         goto err;
     }
 
-    entry = proc_create(MONITOR_PROC_HIST_5MIN, 0444, entry_root, &hist_5min_proc_ops);
+    entry = proc_create_data(MONITOR_PROC_HIST_1MIN, 0444, entry_root, &hist_proc_ops,
+        (void *) offsetof(struct single_cpu_stat_history, hist.h_1min));
+    if (unlikely(!entry)) {
+        path = MONITOR_PROC_HIST_1MIN_PERCPU;
+        goto err;
+    }
+
+    entry = proc_create_data(MONITOR_PROC_HIST_5MIN, 0444, entry_root, &hist_proc_ops,
+        (void *) offsetof(struct single_cpu_stat_history, hist.h_5min));
     if (unlikely(!entry)) {
         path = MONITOR_PROC_HIST_5MIN_PERCPU;
         goto err;
     }
 
-    entry = proc_create(MONITOR_PROC_HIST_1HOUR, 0444, entry_root, &hist_1hour_proc_ops);
+    entry = proc_create_data(MONITOR_PROC_HIST_1HOUR, 0444, entry_root, &hist_proc_ops,
+        (void *) offsetof(struct single_cpu_stat_history, hist.h_1hour));
     if (unlikely(!entry)) {
         path = MONITOR_PROC_HIST_1HOUR_PERCPU;
         goto err;
     }
 
-    entry = proc_create(MONITOR_PROC_HIST_1DAY, 0444, entry_root, &hist_1day_proc_ops);
+    entry = proc_create_data(MONITOR_PROC_HIST_1DAY, 0444, entry_root, &hist_proc_ops,
+        (void *) offsetof(struct single_cpu_stat_history, hist.h_1day));
     if (unlikely(!entry)) {
         path = MONITOR_PROC_HIST_1DAY_PERCPU;
         goto err;
@@ -420,7 +343,7 @@ int cpu_stat_init(void)
     return 0;
 err:
     printk(KERN_ERR "MONITOR: create %s fail!", path);
-    kfree(cpu_stat);
+    cpu_stat_destory();
     return -EINVAL;
 }
 
