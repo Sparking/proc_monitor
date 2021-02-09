@@ -1,6 +1,7 @@
 #include <linux/slab.h>
 #include <linux/tick.h>
 #include <linux/math64.h>
+#include <linux/rwlock.h>
 #include <linux/version.h>
 #include <linux/seq_file.h>
 #include <linux/kernel_stat.h>
@@ -44,6 +45,7 @@ struct single_cpu_stat_history {
 };
 
 struct cpu_stat_value {
+    rwlock_t rwlock;
     unsigned int ncore;
     struct single_cpu_stat_history core[0];
 };
@@ -146,13 +148,13 @@ static int show_hist(struct seq_file *p, void *v, vsmall_ring_buffer_t *phis)
 static int show_hist_filed(struct seq_file *p, void *v, unsigned long off)
 {
     unsigned int i;
-    struct single_cpu_stat_history *core;
 
-    for (i = 0; i < cpu_stat->ncore; i++) {
-        core = cpu_stat->core + i;
+    read_lock(&cpu_stat->rwlock);
+    for_each_online_cpu(i) {
         seq_printf(p, "%d", i);
-        show_hist(p, v, (vsmall_ring_buffer_t *) ((void *) core + off));
+        show_hist(p, v, (vsmall_ring_buffer_t *) ((void *) &cpu_stat->core[i] + off));
     }
+    read_unlock(&cpu_stat->rwlock);
 
     return 0;
 }
@@ -162,12 +164,14 @@ static int show_rt_with_off(struct seq_file *p, void *v, const unsigned off)
     unsigned int i;
     vsmall_ring_buffer_t *phis;
 
-    for (i = 0; i < cpu_stat->ncore; i++) {
-        phis = (vsmall_ring_buffer_t *) (((char *) &cpu_stat->core[i]) + off);
+    read_lock(&cpu_stat->rwlock);
+    for_each_online_cpu(i) {
+        phis = (vsmall_ring_buffer_t *) ((void *) &cpu_stat->core[i] + off);
         seq_printf(p, "%d", i);
         seq_put_decimal_ull(p, SEQ_DELIM_SPACE, (unsigned long long) phis->sum / phis->cnt);
         seq_putc(p, '\n');
     }
+    read_unlock(&cpu_stat->rwlock);
 
     return 0;
 }
@@ -280,7 +284,7 @@ static const struct file_operations hist_1day_proc_ops = {
     .release = single_release,
 };
 
-int cpu_stat_update(void)
+void cpu_stat_update(void)
 {
     int i;
     u8 index;
@@ -293,11 +297,15 @@ int cpu_stat_update(void)
     struct single_cpu_stat_value *cur;
     struct single_cpu_stat_value *last;
 
+    /* XXX: 删除代码优化，可以保证cpu_stat不会为空 */
+#if 0
     if (unlikely(!cpu_stat)) {
         printk(KERN_ERR "MONITOR: cpu stat null!");
-        return -EINVAL;
+        return;
     }
+#endif
 
+    write_lock(&cpu_stat->rwlock);
     for_each_online_cpu(i) {
         core = cpu_stat->core + i;
         delta_index = core->cur_stat;
@@ -341,14 +349,14 @@ int cpu_stat_update(void)
         history_record_update(&core->hist, res);
         (void) vsmall_ring_buffer_add(vsmall_ring_buffer_ptr(core->rt_5min), res);
     }
-
-    return 0;
+    write_unlock(&cpu_stat->rwlock);
 }
 
 int cpu_stat_init(void)
 {
     unsigned int ncore;
     unsigned int size;
+    const char *path;
     struct proc_dir_entry *entry_root;
     struct proc_dir_entry *entry;
 
@@ -366,51 +374,52 @@ int cpu_stat_init(void)
         return -EINVAL;
     }
 
-    (void) memset(cpu_stat, 0, size);
     cpu_stat->ncore = ncore;
+    rwlock_init(&cpu_stat->rwlock);
     for (size = 0; size < ncore; size++) {
         history_record_init(&cpu_stat->core[size].hist);
         vsmall_ring_buffer_init(cpu_stat->core[size].rt_5min, 1);
     }
 
-    entry = proc_create("stat", 0444, entry_root, &stat_hist_1min_proc_ops);
+    entry = proc_create(MONITOR_PROC_HIST_1MIN, 0444, entry_root, &stat_hist_1min_proc_ops);
     if (unlikely(!entry)) {
-        printk(KERN_ERR "create /proc/monitor/cpu/stat fail!");
+        path = MONITOR_PROC_HIST_1MIN_PERCPU;
         goto err;
     }
 
-    entry = proc_create("stat_rt_1min", 0444, entry_root, &rt_1min_proc_ops);
+    entry = proc_create(MONITOR_PROC_RT_1MIN, 0444, entry_root, &rt_1min_proc_ops);
     if (unlikely(!entry)) {
-        printk(KERN_ERR "create /proc/monitor/cpu/stat fail!");
+        path = MONITOR_PROC_RT_1MIN_PERCPU;
         goto err;
     }
 
-    entry = proc_create("stat_rt_5min", 0444, entry_root, &rt_5min_proc_ops);
+    entry = proc_create(MONITOR_PROC_RT_5MIN, 0444, entry_root, &rt_5min_proc_ops);
     if (unlikely(!entry)) {
-        printk(KERN_ERR "create /proc/monitor/cpu/stat fail!");
+        path = MONITOR_PROC_RT_5MIN_PERCPU;
         goto err;
     }
 
-    entry = proc_create("stat_hist_5min", 0444, entry_root, &hist_5min_proc_ops);
+    entry = proc_create(MONITOR_PROC_HIST_5MIN, 0444, entry_root, &hist_5min_proc_ops);
     if (unlikely(!entry)) {
-        printk(KERN_ERR "create /proc/monitor/cpu/stat_hist_5min fail!");
+        path = MONITOR_PROC_HIST_5MIN_PERCPU;
         goto err;
     }
 
-    entry = proc_create("stat_hist_1hour", 0444, entry_root, &hist_1hour_proc_ops);
+    entry = proc_create(MONITOR_PROC_HIST_1HOUR, 0444, entry_root, &hist_1hour_proc_ops);
     if (unlikely(!entry)) {
-        printk(KERN_ERR "create /proc/monitor/cpu/stat_hist_1hour fail!");
+        path = MONITOR_PROC_HIST_1HOUR_PERCPU;
         goto err;
     }
 
-    entry = proc_create("stat_hist_1day", 0444, entry_root, &hist_1day_proc_ops);
+    entry = proc_create(MONITOR_PROC_HIST_1DAY, 0444, entry_root, &hist_1day_proc_ops);
     if (unlikely(!entry)) {
-        printk(KERN_ERR "create /proc/monitor/cpu/stat_hist_1day fail!");
+        path = MONITOR_PROC_HIST_1DAY_PERCPU;
         goto err;
     }
 
     return 0;
 err:
+    printk(KERN_ERR "MONITOR: create %s fail!", path);
     kfree(cpu_stat);
     return -EINVAL;
 }
@@ -423,12 +432,12 @@ void cpu_stat_destory(void)
     if (unlikely(!entry && !cpu_stat))
         return;
 
-    remove_proc_entry("stat", entry);
-    remove_proc_entry("stat_rt_1min", entry);
-    remove_proc_entry("stat_rt_5min", entry);
-    remove_proc_entry("stat_hist_5min", entry);
-    remove_proc_entry("stat_hist_1hour", entry);
-    remove_proc_entry("stat_hist_1day", entry);
+    remove_proc_entry(MONITOR_PROC_HIST_1MIN, entry);
+    remove_proc_entry(MONITOR_PROC_RT_1MIN, entry);
+    remove_proc_entry(MONITOR_PROC_RT_5MIN, entry);
+    remove_proc_entry(MONITOR_PROC_HIST_5MIN, entry);
+    remove_proc_entry(MONITOR_PROC_HIST_1HOUR, entry);
+    remove_proc_entry(MONITOR_PROC_HIST_1DAY, entry);
     kfree(cpu_stat);
     cpu_stat = NULL;
 }

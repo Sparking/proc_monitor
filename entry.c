@@ -5,12 +5,17 @@
 #include "percpu_monitor.h"
 #include "task_monitor.h"
 
+/* TODO: 打桩，后续实现内存信息的收集 */
+#define mem_stat_update() do {} while (0)
+
 static struct delayed_work monitor_sample_work;
 
 static void monitor_sample_work_func(struct work_struct *work)
 {
-	schedule_delayed_work(&monitor_sample_work, 5 * HZ);
+    schedule_delayed_work(&monitor_sample_work, 5 * HZ);
     cpu_stat_update();
+    mem_stat_update();
+    task_stat_update();
 }
 
 static int __init this_module_init(void)
@@ -28,8 +33,8 @@ static int __init this_module_init(void)
         return ret;
     }
 
-	INIT_DELAYED_WORK(&monitor_sample_work, monitor_sample_work_func);
-	schedule_delayed_work(&monitor_sample_work, HZ);
+    INIT_DELAYED_WORK(&monitor_sample_work, monitor_sample_work_func);
+    schedule_delayed_work(&monitor_sample_work, HZ);
 
     return 0;
 }
