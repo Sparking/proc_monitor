@@ -1,3 +1,4 @@
+#include <linux/init.h>
 #include "history.h"
 
 unsigned char vsmall_ring_buffer_add(vsmall_ring_buffer_t *__restrict pvrb, const u16 val)
@@ -39,7 +40,7 @@ unsigned char vsmall_ring_buffer_add(vsmall_ring_buffer_t *__restrict pvrb, cons
     return pvrb->cnt;
 }
 
-void history_record_init(history_record_t *__restrict h)
+void __init history_record_init(history_record_t *__restrict h)
 {
     if (unlikely(!h))
         return;

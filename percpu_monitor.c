@@ -1,3 +1,4 @@
+#include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/tick.h>
 #include <linux/math64.h>
@@ -268,7 +269,7 @@ static const struct file_operations hist_proc_ops = {
     .release = single_release,
 };
 
-int cpu_stat_init(void)
+int __init cpu_stat_init(void)
 {
     unsigned int ncore;
     unsigned int size;
@@ -342,11 +343,11 @@ int cpu_stat_init(void)
     return 0;
 err:
     printk(KERN_ERR "MONITOR: create %s fail!", path);
-    cpu_stat_destory();
+    cpu_stat_exit();
     return -EINVAL;
 }
 
-void cpu_stat_destory(void)
+void cpu_stat_exit(void)
 {
     struct proc_dir_entry *entry;
 

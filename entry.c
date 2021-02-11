@@ -29,7 +29,14 @@ static int __init this_module_init(void)
 
     ret = cpu_stat_init();
     if (ret < 0) {
-        monitor_proc_fs_destory();
+        monitor_proc_fs_exit();
+        return ret;
+    }
+
+    ret = task_stat_init();
+    if (ret < 0) {
+        cpu_stat_exit();
+        monitor_proc_fs_exit();
         return ret;
     }
 
@@ -42,8 +49,9 @@ static int __init this_module_init(void)
 static void __exit this_module_exit(void)
 {
     cancel_delayed_work(&monitor_sample_work);
-    cpu_stat_destory();
-    monitor_proc_fs_destory();
+    task_stat_exit();
+    cpu_stat_exit();
+    monitor_proc_fs_exit();
 }
 
 module_init(this_module_init);

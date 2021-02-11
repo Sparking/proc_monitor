@@ -6,7 +6,7 @@
 
 /* hash函数直接计算出下标 */
 typedef unsigned int (*hash_table_index_func_t)(const struct hlist_node *__restrict element);
-typedef void (*hash_table_release_func_t)(const struct hlist_node *__restrict node);
+typedef void (*hash_table_release_func_t)(struct hlist_node *__restrict node);
 
 typedef struct {
     unsigned char using_index;
@@ -16,7 +16,7 @@ typedef struct {
     struct hlist_head *table[2];
 } dual_hash_table_t;
 
-extern dual_hash_table_t *dual_hash_table_create(const unsigned int size,
+extern dual_hash_table_t *__init dual_hash_table_create(const unsigned int size,
                             const hash_table_index_func_t func,
                             const hash_table_release_func_t release);
 
@@ -40,6 +40,8 @@ extern struct hlist_node *dual_hash_table_find_using(dual_hash_table_t *__restri
 
 extern struct hlist_node *dual_hash_table_find_last(dual_hash_table_t *__restrict t,
                             const unsigned int index);
+
+extern void dual_hash_table_clean_last(dual_hash_table_t *__restrict t);
 
 extern void dual_hash_table_destory(dual_hash_table_t *__restrict t);
 

@@ -1,4 +1,5 @@
 #include <linux/slab.h>
+#include <linux/init.h>
 #include "hash_table.h"
 
 #define HASH_QUICK_MATH 1
@@ -39,7 +40,7 @@ static inline unsigned int hash_table_hash2index(const unsigned int size, const 
 #define hash_oob(size, hash)    ((size) >= (hash))
 #endif
 
-dual_hash_table_t *dual_hash_table_create(const unsigned int size,
+dual_hash_table_t * __init dual_hash_table_create(const unsigned int size,
                     const hash_table_index_func_t hash, const hash_table_release_func_t release)
 {
     unsigned int i;
@@ -111,7 +112,7 @@ static struct hlist_node *dual_hash_table_find(dual_hash_table_t *__restrict t,
 struct hlist_node *dual_hash_table_find_using(dual_hash_table_t *__restrict t,
                     const unsigned int hash)
 {
-    if (t)
+    if (likely(t))
         return dual_hash_table_find(t, hash, t->using_index);
 
     return NULL;
@@ -120,7 +121,7 @@ struct hlist_node *dual_hash_table_find_using(dual_hash_table_t *__restrict t,
 struct hlist_node *dual_hash_table_find_last(dual_hash_table_t *__restrict t,
                     const unsigned int hash)
 {
-    if (t)
+    if (likely(t))
         return dual_hash_table_find(t, hash, t->using_index ^ 1);
 
     return NULL;
@@ -141,21 +142,21 @@ static void dual_hash_table_clean(dual_hash_table_t *__restrict t, const unsigne
     }
 }
 
-void dual_hash_table_clean_using(dual_hash_table_t *__restrict t, const unsigned int i)
+void dual_hash_table_clean_using(dual_hash_table_t *__restrict t)
 {
-    if (t)
+    if (likely(t))
         dual_hash_table_clean(t, t->using_index);
 }
 
-void dual_hash_table_clean_last(dual_hash_table_t *__restrict t, const unsigned int i)
+void dual_hash_table_clean_last(dual_hash_table_t *__restrict t)
 {
-    if (t)
+    if (likely(t))
         dual_hash_table_clean(t, t->using_index ^ 1);
 }
 
 void dual_hash_table_destory(dual_hash_table_t *__restrict t)
 {
-    if (t) {
+    if (likely(t)) {
         dual_hash_table_clean(t, t->using_index);
         dual_hash_table_clean(t, t->using_index ^ 1);
         kfree(t);

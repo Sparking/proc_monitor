@@ -8,7 +8,7 @@ struct proc_dir_entry *monitor_proc_fs_entry(const monitor_proc_fs_type_t t)
     return fs_entry[t];
 }
 
-int monitor_proc_fs_init(void)
+int __init monitor_proc_fs_init(void)
 {
     struct proc_dir_entry *fs_entry_root;
 
@@ -35,12 +35,12 @@ int monitor_proc_fs_init(void)
 
     return 0;
 destory_entry:
-    monitor_proc_fs_destory();
+    monitor_proc_fs_exit();
 
     return -EINVAL;
 }
 
-void monitor_proc_fs_destory(void)
+void monitor_proc_fs_exit(void)
 {
     struct proc_dir_entry *fs_entry_root;
 

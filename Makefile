@@ -19,10 +19,12 @@ MOD_INSTALL_PATH := $(ROOTFS_IMAGES)/lib/modules
 install: build
 	install -m0755 -d $(MOD_INSTALL_PATH)
 	install -m0755 -t $(MOD_INSTALL_PATH) $(mod_name).ko
-	install -m0755 -d $(ROOTFS_IMAGES)/etc/systemd/system/multi-user.target.wants
+	install -m0755 -d $(ROOTFS_IMAGES)/lib/systemd/system
 	install -m0644 -t $(ROOTFS_IMAGES)/lib/systemd/system read_proc.service
+	install -m0755 -d $(ROOTFS_IMAGES)/etc/systemd/system/multi-user.target.wants
 	@rm -f $(ROOTFS_IMAGES)/etc/systemd/system/multi-user.target.wants/read_proc.service
-	ln -s /lib/systemd/system/read_proc.service $(ROOTFS_IMAGES)/etc/systemd/system/multi-user.target.wants/read_proc.service
+	ln -s /lib/systemd/system/read_proc.service \
+	    $(ROOTFS_IMAGES)/etc/systemd/system/multi-user.target.wants/read_proc.service
 
 .PHONY: build
 build: clean
@@ -34,7 +36,7 @@ clean:
 
 .PHONY: insmod
 insmod:
-	@sudo insmod $(MOD_INSTALL_PATH)/$(mod_name).ko
+	@sudo insmod $(MOD_INSTALL_PATH)/$(mod_name).ko process_hash_size=128 thread_hash_size=128
 
 .PHONY: rmmod
 rmmod:

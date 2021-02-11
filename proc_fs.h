@@ -12,7 +12,7 @@ typedef enum {
 } monitor_proc_fs_type_t;
 
 extern struct proc_dir_entry *monitor_proc_fs_entry(const monitor_proc_fs_type_t t);
-extern int monitor_proc_fs_init(void);
-extern void monitor_proc_fs_destory(void);
+extern int __init monitor_proc_fs_init(void);
+extern void monitor_proc_fs_exit(void);
 
 #endif /* _READ_PROC_PROC_FS_H_ */
