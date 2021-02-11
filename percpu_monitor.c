@@ -201,7 +201,6 @@ static int do_show_his(struct seq_file *__restrict p, const vsmall_ring_buffer_t
     u16 index;
 
     c = phis->rear;
-    /* 瞬时值 */
     if (likely(phis->accum_times)) {
         if (likely(phis->accum_val)) {
             seq_put_decimal_ull(p, SEQ_DELIM_SPACE,
