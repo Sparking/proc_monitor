@@ -112,6 +112,7 @@ void task_stat_update(void)
     nthread = 0;
     nprocess = 0;
     rcu_read_lock();
+    /* 使用自旋锁，或者其他不带睡眠的锁保护 （直接用rcu？） */
     for_each_process(process) {
         id = task_pid_nr(process);
         (void) get_task_info(process);

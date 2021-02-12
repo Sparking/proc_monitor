@@ -1,6 +1,7 @@
 mod_name := read_proc
 obj-m    := $(mod_name).o
-$(mod_name)-objs := entry.o proc_fs.o history.o hash_table.o percpu_monitor.o task_monitor.o
+$(mod_name)-objs := entry.o proc_fs.o history.o hash_table.o
+$(mod_name)-objs += percpu_monitor.o memory_monitor.o task_monitor.o
 
 ifeq ($(EXPORT_HEADER),)
 EXPORT_HEADER  := $(PRJROOT)/images/header

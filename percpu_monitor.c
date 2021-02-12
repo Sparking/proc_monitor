@@ -2,19 +2,13 @@
 #include <linux/slab.h>
 #include <linux/tick.h>
 #include <linux/math64.h>
-#include <linux/rwlock.h>
+#include <linux/spinlock.h>
 #include <linux/version.h>
 #include <linux/seq_file.h>
 #include <linux/kernel_stat.h>
 #include "history.h"
 #include "proc_fs.h"
 #include "percpu_monitor.h"
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
-#define SEQ_DELIM_SPACE " "
-#else
-#define SEQ_DELIM_SPACE ' '
-#endif
 
 #ifndef arch_irq_stat_cpu
 #define arch_irq_stat_cpu(cpu) 0
@@ -192,37 +186,6 @@ static int show_rt(struct seq_file *p, void *v)
         seq_putc(p, '\n');
     }
     read_unlock(&cpu_stat->rwlock);
-
-    return 0;
-}
-
-static int do_show_his(struct seq_file *__restrict p, const vsmall_ring_buffer_t *__restrict phis)
-{
-    u8 c;
-    u16 index;
-
-    c = phis->rear;
-    if (likely(phis->accum_times)) {
-        if (likely(phis->accum_val)) {
-            seq_put_decimal_ull(p, SEQ_DELIM_SPACE,
-                (unsigned long long) (phis->accum_val / phis->accum_times));
-        } else {
-            seq_printf(p, " 0");
-        }
-    } else {
-        seq_put_decimal_ull(p, SEQ_DELIM_SPACE, (unsigned long long) phis->buffer[c]);
-    }
-
-    for (index = 0; index < phis->cnt; index++) {
-        seq_put_decimal_ull(p, SEQ_DELIM_SPACE, (unsigned long long) phis->buffer[c]);
-        if (unlikely(c == 0))
-            c = phis->size;
-        c--;
-    }
-
-    for (; index < phis->size; index++)
-        seq_printf(p, " 0");
-    seq_putc(p, '\n');
 
     return 0;
 }

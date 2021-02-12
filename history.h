@@ -3,6 +3,14 @@
 
 #include <linux/string.h>
 #include <linux/stddef.h>
+#include <linux/seq_file.h>
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+#define SEQ_DELIM_SPACE " "
+#else
+#define SEQ_DELIM_SPACE ' '
+#endif
 
 #define vsmall_ring_buffer_def(name, size) struct { \
     vsmall_ring_buffer_t _h; \
@@ -48,5 +56,7 @@ extern unsigned char vsmall_ring_buffer_add(vsmall_ring_buffer_t *__restrict pvr
 extern void __init history_record_init(history_record_t *__restrict h);
 
 extern void history_record_update(history_record_t *__restrict h, const u16 val);
+
+extern int do_show_his(struct seq_file *__restrict p, const vsmall_ring_buffer_t *__restrict phis);
 
 #endif /* _PROC_MONITOR_HISTORY_H_ */

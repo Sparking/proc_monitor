@@ -77,7 +77,7 @@ bool dual_hash_table_add_using(dual_hash_table_t *__restrict t, struct hlist_nod
     unsigned int index;
     struct hlist_head *head;
 
-    if (!t || !node)
+    if (unlikely(!t || !node))
         return false;
 
     /* insert directly, no checking if has the same key */
