@@ -63,22 +63,23 @@ void history_record_update(history_record_t *__restrict h, const u16 val)
     (void) vsmall_ring_buffer_add(vsmall_ring_buffer_ptr(h->h_1day), val);
 }
 
-int do_show_his(struct seq_file *__restrict p, const vsmall_ring_buffer_t *__restrict phis)
+int show_history_record(struct seq_file *__restrict p, const vsmall_ring_buffer_t *__restrict phis)
 {
     u8 c;
     u16 index;
+    u16 first_v;
 
     c = phis->rear;
     if (likely(phis->accum_times)) {
         if (likely(phis->accum_val)) {
-            seq_put_decimal_ull(p, SEQ_DELIM_SPACE,
-                (unsigned long long) (phis->accum_val / phis->accum_times));
+            first_v = phis->accum_val / phis->accum_times;
         } else {
-            seq_printf(p, " 0");
+            first_v = 0;
         }
     } else {
-        seq_put_decimal_ull(p, SEQ_DELIM_SPACE, (unsigned long long) phis->buffer[c]);
+        first_v = phis->buffer[c];
     }
+    seq_printf(p, "%hu", first_v);
 
     for (index = 0; index < phis->cnt; index++) {
         seq_put_decimal_ull(p, SEQ_DELIM_SPACE, (unsigned long long) phis->buffer[c]);

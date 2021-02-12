@@ -23,7 +23,7 @@ __kernel_ulong_t memory_total_size_kb(void)
 static int show_hist(struct seq_file *p, void *v)
 {
     read_lock(&mem_stat.rwlock);
-    do_show_his(p, (vsmall_ring_buffer_t *) ((void *) &mem_stat + (unsigned long) p->private));
+    show_history_record(p, (vsmall_ring_buffer_t *) ((void *) &mem_stat + (unsigned long) p->private));
     read_unlock(&mem_stat.rwlock);
 
     return 0;
@@ -132,8 +132,6 @@ void memory_stat_exit(void)
         return;
 
     remove_proc_entry(MONITOR_PROC_HIST_1MIN, entry);
-    remove_proc_entry(MONITOR_PROC_RT_1MIN, entry);
-    remove_proc_entry(MONITOR_PROC_RT_5MIN, entry);
     remove_proc_entry(MONITOR_PROC_HIST_5MIN, entry);
     remove_proc_entry(MONITOR_PROC_HIST_1HOUR, entry);
     remove_proc_entry(MONITOR_PROC_HIST_1DAY, entry);

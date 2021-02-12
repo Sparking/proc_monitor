@@ -198,8 +198,8 @@ static int show_hist(struct seq_file *p, void *v)
     off = (unsigned long) p->private;
     read_lock(&cpu_stat->rwlock);
     for_each_online_cpu(i) {
-        seq_printf(p, "%d", i);
-        do_show_his(p, (vsmall_ring_buffer_t *) ((void *) &cpu_stat->core[i] + off));
+        seq_printf(p, "%u ", i);
+        show_history_record(p, (vsmall_ring_buffer_t *) ((void *) &cpu_stat->core[i] + off));
     }
     read_unlock(&cpu_stat->rwlock);
 

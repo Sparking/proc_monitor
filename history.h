@@ -57,6 +57,7 @@ extern void __init history_record_init(history_record_t *__restrict h);
 
 extern void history_record_update(history_record_t *__restrict h, const u16 val);
 
-extern int do_show_his(struct seq_file *__restrict p, const vsmall_ring_buffer_t *__restrict phis);
+extern int show_history_record(struct seq_file *__restrict p,
+            const vsmall_ring_buffer_t *__restrict phis);
 
 #endif /* _PROC_MONITOR_HISTORY_H_ */
