@@ -3,8 +3,8 @@ Description=SYSMON kernel module
 
 [Service]
 Type=simple
-ExecStart=/sbin/insmod /lib/modules/read_proc.ko
-ExecStop=/sbin/rmmod read_proc
+ExecStart=/sbin/insmod /lib/modules/proc_monitor.ko
+ExecStop=/sbin/rmmod proc_monitor
 RemainAfterExit=yes
 LimitCORE=infinity
 

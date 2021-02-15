@@ -5,7 +5,7 @@
 #include <linux/spinlock.h>
 #include "history.h"
 #include "proc_fs.h"
-#include "memory_monitor.h"
+#include "monitor_memory.h"
 
 struct memory_stat_history {
     __kernel_ulong_t total;

@@ -1,7 +1,7 @@
-mod_name := read_proc
+mod_name := proc_monitor
 obj-m    := $(mod_name).o
 $(mod_name)-objs := entry.o proc_fs.o history.o hash_table.o
-$(mod_name)-objs += percpu_monitor.o memory_monitor.o task_monitor.o
+$(mod_name)-objs += monitor_percpu.o monitor_memory.o monitor_task.o
 
 ifeq ($(EXPORT_HEADER),)
 EXPORT_HEADER  := $(PRJROOT)/images/header
@@ -29,11 +29,11 @@ install: build
 
 .PHONY: build
 build: clean
-	$(MAKE) -C $(KBUILD_OUTPUT) M=$(CURDIR) modules
+	$(MAKE) -j4 -C $(KBUILD_OUTPUT) M=$(CURDIR) modules
 
 .PHONY: clean
 clean:
-	$(MAKE) -C $(KBUILD_OUTPUT) M=$(CURDIR) clean
+	$(MAKE) -j4 -C $(KBUILD_OUTPUT) M=$(CURDIR) clean
 
 .PHONY: insmod
 insmod:

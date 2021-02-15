@@ -53,7 +53,7 @@ typedef struct {
 
 extern unsigned char vsmall_ring_buffer_add(vsmall_ring_buffer_t *__restrict pvrb, const u16 val);
 
-extern void __init history_record_init(history_record_t *__restrict h);
+extern void history_record_init(history_record_t *__restrict h);
 
 extern void history_record_update(history_record_t *__restrict h, const u16 val);
 

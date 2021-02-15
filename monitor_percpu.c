@@ -8,7 +8,7 @@
 #include <linux/kernel_stat.h>
 #include "history.h"
 #include "proc_fs.h"
-#include "percpu_monitor.h"
+#include "monitor_percpu.h"
 
 #ifndef arch_irq_stat_cpu
 #define arch_irq_stat_cpu(cpu) 0
@@ -47,8 +47,18 @@ struct cpu_stat_value {
 
 static struct cpu_stat_value *cpu_stat = NULL;
 
-#ifdef arch_idle_time
+u64 cpu_delta_tick(const unsigned int cpu)
+{
+    if (unlikely(cpu >= cpu_stat->ncore)) {
+        printk(KERN_ERR "MONITOR BUG: request cpu(%u), but only has %u cpu cores!", cpu,
+            cpu_stat->ncore);
+        return 0;
+    }
 
+    return cpu_stat->core[cpu].total;
+}
+
+#ifdef arch_idle_time
 static u64 get_idle_time(struct kernel_cpustat *kcs, int cpu)
 {
     u64 idle;
@@ -68,9 +78,7 @@ static u64 get_iowait_time(struct kernel_cpustat *kcs, int cpu)
         iowait += arch_idle_time(cpu);
     return iowait;
 }
-
 #else
-
 static u64 get_idle_time(struct kernel_cpustat *kcs, int cpu)
 {
     u64 idle, idle_usecs = -1ULL;
@@ -102,7 +110,6 @@ static u64 get_iowait_time(struct kernel_cpustat *kcs, int cpu)
 
     return iowait;
 }
-
 #endif
 
 void cpu_stat_update(void)
@@ -117,14 +124,6 @@ void cpu_stat_update(void)
     struct single_cpu_stat_history *core;
     struct single_cpu_stat_value *cur;
     struct single_cpu_stat_value *last;
-
-    /* XXX: 删除代码优化，可以保证cpu_stat不会为空 */
-#if 0
-    if (unlikely(!cpu_stat)) {
-        printk(KERN_ERR "MONITOR: cpu stat null!");
-        return;
-    }
-#endif
 
     write_lock(&cpu_stat->rwlock);
     for_each_online_cpu(i) {

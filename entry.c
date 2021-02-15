@@ -1,10 +1,11 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/workqueue.h>
+#include <linux/spinlock.h>
 #include "proc_fs.h"
-#include "task_monitor.h"
-#include "memory_monitor.h"
-#include "percpu_monitor.h"
+#include "monitor_task.h"
+#include "monitor_memory.h"
+#include "monitor_percpu.h"
 
 static struct delayed_work monitor_sample_work;
 

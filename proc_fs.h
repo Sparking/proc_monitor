@@ -5,10 +5,13 @@
 #include "monitor_path.h"
 
 typedef enum {
-    MONITOR_PROC_FS_ENTRY_ROOT     = 0,
-    MONITOR_PROC_FS_ENTRY_CPU_ROOT = 1,
-    MONITOR_PROC_FS_ENTRY_MEM_ROOT = 2,
-    MONITOR_PROC_FS_ENTRY_MAX      = 3,
+    MONITOR_PROC_FS_ENTRY_ROOT          = 0,
+    MONITOR_PROC_FS_ENTRY_CPU_ROOT      = 1,
+    MONITOR_PROC_FS_ENTRY_MEM_ROOT      = 2,
+    MONITOR_PROC_FS_ENTRY_TASK_ROOT     = 3,
+    MONITOR_PROC_FS_ENTRY_PROCESS_ROOT  = 4,
+    MONITOR_PROC_FS_ENTRY_THREAD_ROOT   = 5,
+    MONITOR_PROC_FS_ENTRY_MAX           = 6,
 } monitor_proc_fs_type_t;
 
 extern struct proc_dir_entry *monitor_proc_fs_entry(const monitor_proc_fs_type_t t);
