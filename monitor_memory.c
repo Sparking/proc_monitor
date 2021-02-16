@@ -68,7 +68,7 @@ void memory_stat_update(void)
     used = i.totalram - i.freeram - i.bufferram - cached - sreclaimable;
     rate = (u16) (used * 100 * 100 / i.totalram);
     write_lock(&mem_stat.rwlock);
-    mem_stat.total = i.totalram;
+    mem_stat.total = i.totalram << (PAGE_SHIFT - 10);
     history_record_update(&mem_stat.hist, rate);
     write_unlock(&mem_stat.rwlock);
 }

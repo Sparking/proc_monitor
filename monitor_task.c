@@ -1,9 +1,10 @@
-#include <linux/module.h>
 #include <linux/init.h>
-#include <uapi/linux/sched.h>
-#include <linux/init_task.h>
+#include <linux/module.h>
 #include <linux/mm_types.h>
+#include <linux/spinlock.h>
 #include <linux/sched/mm.h>
+#include <linux/init_task.h>
+#include <uapi/linux/sched.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/cputime.h>
 #include "proc_fs.h"
@@ -33,7 +34,7 @@ struct process_memory_info {
     unsigned long peak;           /* VmPeak, 进程所使用的虚拟内存的峰值 */
     unsigned long total;          /* VmSize, 进程当前使用的虚拟内存的大小 */
     unsigned long hwm;            /* VmHWM, 进程所使用的物理内存的峰值 */
-    unsigned long rss;            /* VmRSS, 进程当前使用的物理内存的大小, Resident set size.sum of RssAnon, RssFile, and RssShmem */
+    unsigned long rss;            /* VmRSS, 进程当前使用的物理内存的大小 */
     unsigned long swap;           /* VmSwap, 进程所使用的交换区的大小 */
     unsigned long text;           /* VmExe, 文本段 */
     unsigned long data;           /* VmData, 数据段 */
@@ -56,10 +57,11 @@ struct monitor_task {
     struct hlist_node node;
     unsigned long long start_time;
     char state;
+    char comm[63];
     int prio;
     int nice;
     pid_t task_id;
-    pid_t super_id;     /* 对进程来说，是父进程id；对线程来说，是主线程的id */
+    pid_t super_id;                 /* 对进程来说，是父进程id；对线程来说，是主线程的id */
     unsigned int cpu_running;
     cpumask_t cpu_allowed;
     char private[0];
@@ -67,14 +69,13 @@ struct monitor_task {
 
 static uint process_hash_size = 32;
 static uint thread_hash_size = 64;
-static dual_hash_table_t *process_hash_table = NULL;
-static dual_hash_table_t *thread_hash_table = NULL;
 module_param(process_hash_size, uint, 0444);
 module_param(thread_hash_size, uint, 0444);
+static rwlock_t task_rwlock;        /* 保护以下两个hash表 */
+static dual_hash_table_t *process_hash_table = NULL;
+static dual_hash_table_t *thread_hash_table = NULL;
 
-#define MM_CONV_DEC(val)    ((val) << (PAGE_SHIFT - 10))
-static void monitor_task_mem(struct process_memory_info *__restrict vm,
-                struct mm_struct *__restrict mm)
+static void get_task_mem(struct process_memory_info *__restrict vm, struct mm_struct *__restrict mm)
 {
     unsigned long text, lib, anon, file, shmem;
     unsigned long hiwater_vm, total_vm, hiwater_rss, total_rss;
@@ -93,6 +94,7 @@ static void monitor_task_mem(struct process_memory_info *__restrict vm,
     text = min(text, mm->exec_vm << PAGE_SHIFT);
     lib = (mm->exec_vm << PAGE_SHIFT) - text;
 
+#define MM_CONV_DEC(val)    ((val) << (PAGE_SHIFT - 10))
     vm->peak = MM_CONV_DEC(hiwater_vm);
     vm->total = MM_CONV_DEC(total_vm);
     vm->hwm = MM_CONV_DEC(hiwater_rss);
@@ -102,8 +104,8 @@ static void monitor_task_mem(struct process_memory_info *__restrict vm,
     vm->data = MM_CONV_DEC(mm->data_vm);
     vm->stack = MM_CONV_DEC(mm->stack_vm);
     vm->lib = lib >> 10;
-}
 #undef MM_CONV_DEC
+}
 
 static void monitor_task_update_memory_history(struct task_struct *__restrict task,
                 struct monitor_process *__restrict ps)
@@ -113,9 +115,9 @@ static void monitor_task_update_memory_history(struct task_struct *__restrict ta
 
     mm = get_task_mm(task);
     if (likely(mm)) {
-        monitor_task_mem(&ps->vm, mm);
-        rate = ps->vm.total * 10000 / memory_total_size_kb();
+        get_task_mem(&ps->vm, mm);
         mmput(mm);
+        rate = ps->vm.rss * 10000 / memory_total_size_kb();
     } else {
         memzero_explicit(&ps->vm, sizeof(ps->vm));
         rate = 0;
@@ -155,6 +157,7 @@ static void monitor_task_init_common(struct task_struct *__restrict task,
     t->cpu_running = task_cpu(task);
     t->cpu_allowed = *task->cpus_ptr;
     t->start_time = task->start_time;
+    strncpy(t->comm, task->comm, sizeof(t->comm));
 }
 
 static void monitor_task_init_process(struct task_struct *__restrict task,
@@ -192,18 +195,14 @@ void task_stat_update(void)
 {
     pid_t id;
     pid_t main_thread_id;
-    unsigned int nprocess;
-    unsigned int nthread;
-    struct task_struct *process;
-    struct task_struct *thread;
     struct monitor_task *t;
-    struct monitor_process *ps;
     struct hlist_node *t_node;
+    struct monitor_process *ps;
+    struct task_struct *thread;
+    struct task_struct *process;
 
-    nthread = 0;
-    nprocess = 0;
+    write_lock(&task_rwlock);   /* rcu锁放置于内部, hash表的锁可能会陷入等待 */
     rcu_read_lock();
-    /* 使用自旋锁，或者其他不带睡眠的锁保护 （直接用rcu？） */
     for_each_process(process) {
         main_thread_id = task_pid_nr(process);
         t_node = dual_hash_table_find_last(process_hash_table, main_thread_id);
@@ -220,12 +219,11 @@ void task_stat_update(void)
             monitor_task_init_process(process, t);
             t_node = &t->node;
         }
+
         ps = (struct monitor_process *) t->private;
+        ps->nthreads = 0;
         monitor_task_update_memory_history(process, ps);
         dual_hash_table_add_using(process_hash_table, t_node);
-        nprocess++;
-
-        ps->nthreads = 0;
         for_each_thread(process, thread) {
             id = task_pid_nr(thread);
             t_node = dual_hash_table_find_last(thread_hash_table, id);
@@ -242,11 +240,11 @@ void task_stat_update(void)
                 monitor_task_init_thread(thread, t, main_thread_id);
                 t_node = &t->node;
             }
+
             monitor_task_update_cpu_history(thread, (struct monitor_thread *) t->private);
             dual_hash_table_add_using(thread_hash_table, t_node);
             ps->nthreads++;
         }
-        nthread += ps->nthreads;
     }
 out:
     rcu_read_unlock();
@@ -254,6 +252,7 @@ out:
     dual_hash_table_clean_last(process_hash_table);
     dual_hash_table_switch_table(thread_hash_table);
     dual_hash_table_switch_table(process_hash_table);
+    write_unlock(&task_rwlock);
 }
 
 static unsigned int task_get_id(const struct hlist_node *__restrict node)
@@ -286,14 +285,12 @@ static void show_ps_hist(struct hlist_node *__restrict node, struct seq_file *__
 static void show_thread_hist(struct hlist_node *__restrict node, struct seq_file *__restrict p,
             void *__restrict v)
 {
-    unsigned long off;
     struct monitor_task *task;
 
     task = hlist_entry(node, struct monitor_task, node);
-    off = (unsigned long) v;
     seq_printf(p, "%d ", task->task_id);
     seq_printf(p, "%d ", task->cpu_running);
-    show_history_record(p, (vsmall_ring_buffer_t *) ((void *) task + off));
+    show_history_record(p, (vsmall_ring_buffer_t *) ((void *) task + (unsigned long) v));
 }
 
 static int show_hist(struct seq_file *p, void *v)
@@ -301,29 +298,34 @@ static int show_hist(struct seq_file *p, void *v)
     void *off;
 
     off = (void *) proc_data_task_get_real_parm((unsigned long long) p->private);
+    read_lock(&task_rwlock);
     if (proc_data_task_is_process((unsigned long long) p->private)) {
         dual_hash_table_trave_last(process_hash_table, show_ps_hist, p, off);
     } else {
         dual_hash_table_trave_last(thread_hash_table, show_thread_hist, p, off);
     }
+    read_unlock(&task_rwlock);
 
     return 0;
 }
 
 static void do_show_status(struct hlist_node *__restrict node, struct seq_file *__restrict p,
-            void *__restrict v)
+                void *__restrict v)
 {
     struct monitor_task *task;
 
     task = hlist_entry(node, struct monitor_task, node);
-    seq_printf(p, "%d %d %c %d %d %d", task->task_id, task->super_id, task->state, task->prio,
-        task->nice, task->cpu_running);
+    seq_printf(p, "(%s) %d %d %c %d %d %d", task->comm, task->task_id, task->super_id, task->state,
+        task->prio, task->nice, task->cpu_running);
     seq_putc(p, '\n');
 }
 
 static int show_status(struct seq_file *p, void *v)
 {
+    read_lock(&task_rwlock);
     dual_hash_table_trave_last((dual_hash_table_t *) p->private, do_show_status, p, NULL);
+    read_unlock(&task_rwlock);
+
     return 0;
 }
 
@@ -366,6 +368,7 @@ int __init task_stat_init(void)
         return -EINVAL;
     }
 
+    rwlock_init(&task_rwlock);
     ret = -ENOMEM;
     process_hash_table = dual_hash_table_create(process_hash_size, task_get_id, realse_task);
     if (!process_hash_table) {
@@ -463,6 +466,7 @@ int __init task_stat_init(void)
     }
 
     return 0;
+
 create_proc_data_failed:
     printk(KERN_ERR "MONITOR: create %s fail!", path);
 create_hash_fail_out:
