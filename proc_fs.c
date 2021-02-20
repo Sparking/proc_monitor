@@ -57,7 +57,7 @@ int __init monitor_proc_fs_init(void)
 
     return 0;
 destory_entry:
-    printk(KERN_ERR "MONITOR: fail to create proc entry %s.", path);
+    printk(KERN_ERR "proc monitor: fail to create proc entry %s.\n", path);
     monitor_proc_fs_exit();
 
     return -EINVAL;

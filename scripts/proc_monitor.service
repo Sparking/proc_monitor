@@ -1,0 +1,12 @@
+[Unit]
+Description=SYSMON kernel module
+
+[Service]
+Type=simple
+ExecStart=/sbin/insmod /lib/modules/proc_monitor.ko process_hash_size=512 thread_hash_size=512
+ExecStop=/sbin/rmmod proc_monitor
+RemainAfterExit=yes
+LimitCORE=infinity
+
+[Install]
+WantedBy=multi-user.target

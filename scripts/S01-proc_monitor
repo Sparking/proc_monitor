@@ -1,0 +1,47 @@
+#! /bin/sh
+########################################################################
+# Begin $rc_base/init.d/
+#
+# Description :
+#
+# Authors     : liujiaying@ruijie.com.cn
+#
+# Version     : 00.00
+#
+# Notes       :
+#
+########################################################################
+
+#. /etc/sysconfig/rc
+#. ${rc_functions}
+. /etc/profile
+
+KERN_MODULE_NAME=proc_monitor
+
+case "${1}" in
+        start)
+            echo "Starting ${KERN_MODULE_NAME}..."
+            insmod /lib/modules/${KERN_MODULE_NAME}.ko
+            ;;
+        stop)
+            echo "Stopping ${KERN_MODULE_NAME}..."
+            rmmod ${KERN_MODULE_NAME}
+            ;;
+        restart)
+            ${0} stop
+            ${0} start
+            ;;
+        status)
+            status=`lsmod | grep ${KERN_MODULE_NAME}`
+            if [ -z "${status}" ]; then
+                echo "Module ${KERN_MODULE_NAME} is not currently loaded!" >&2
+                exit 1
+            fi
+            lsmod | head -n 1
+            echo "${status}"
+            ;;
+        *)
+            echo "Usage: ${0} {start|stop|reload|restart|status}"
+            exit 1
+            ;;
+esac

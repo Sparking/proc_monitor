@@ -1,5 +1,6 @@
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/swap.h>
 #include <linux/math64.h>
 #include <linux/vmstat.h>
 #include <linux/spinlock.h>
@@ -54,15 +55,22 @@ void memory_stat_update(void)
     si_meminfo(&i);
     /* si_swapinfo(&i); */
     /* available = si_mem_available(); */
-	cached = global_node_page_state(NR_FILE_PAGES) - i.bufferram;
-	if (cached < 0)
-		cached = 0;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,10,0)
+    cached = global_node_page_state(NR_FILE_PAGES) - i.bufferram;
+    if (cached < 0)
+        cached = 0;
     sreclaimable = global_node_page_state_pages(NR_SLAB_RECLAIMABLE_B);
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
+    cached = global_node_page_state(NR_FILE_PAGES) - i.bufferram;
+    if (cached < 0)
+        cached = 0;
     sreclaimable = global_node_page_state(NR_SLAB_RECLAIMABLE);
 #else
-#error "please port form fs/proc/meminfo.c"
+    cached = global_page_state(NR_FILE_PAGES) - i.bufferram;
+    if (cached < 0)
+        cached = 0;
+    sreclaimable = global_page_state(NR_SLAB_RECLAIMABLE)
+        + global_page_state(NR_SLAB_UNRECLAIMABLE);
 #endif
 
     used = i.totalram - i.freeram - i.bufferram - cached - sreclaimable;
@@ -84,7 +92,7 @@ int __init memory_stat_init(void)
     history_record_init(&mem_stat.hist);
     entry_root = monitor_proc_fs_entry(MONITOR_PROC_FS_ENTRY_MEM_ROOT);
     if (unlikely(!entry_root)) {
-        printk(KERN_ERR "get monitor entry of memory root fail!");
+        printk(KERN_ERR "get monitor entry of memory root fail!\n");
         return -EINVAL;
     }
 
@@ -118,7 +126,7 @@ int __init memory_stat_init(void)
 
     return 0;
 err:
-    printk(KERN_ERR "MONITOR: create %s fail!", path);
+    printk(KERN_ERR "proc monitor: create %s fail!\n", path);
     memory_stat_exit();
     return -EINVAL;
 }

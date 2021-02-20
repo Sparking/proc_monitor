@@ -52,17 +52,11 @@ exit_procfs:
 
 static void __exit this_module_exit(void)
 {
-    printk(KERN_DEBUG "MONITOR: cancel delayed work ...\n");
     cancel_delayed_work(&monitor_sample_work);
-    printk(KERN_DEBUG "MONITOR: clean task stat ...\n");
     task_stat_exit();
-    printk(KERN_DEBUG "MONITOR: clean memory stat ...\n");
     memory_stat_exit();
-    printk(KERN_DEBUG "MONITOR: clean cpu stat ...\n");
     cpu_stat_exit();
-    printk(KERN_DEBUG "MONITOR: clean proc root entries ...\n");
     monitor_proc_fs_exit();
-    printk(KERN_DEBUG "MONITOR: exit!\n");
 }
 
 module_init(this_module_init);

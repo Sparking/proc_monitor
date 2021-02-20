@@ -1,44 +1,45 @@
-mod_name := proc_monitor
-obj-m    := $(mod_name).o
+-include $(KCONFIG)
+
+mod_name         := proc_monitor
+obj-m            := $(mod_name).o
 $(mod_name)-objs := entry.o proc_fs.o history.o hash_table.o
 $(mod_name)-objs += monitor_percpu.o monitor_memory.o monitor_task.o
 
-ifeq ($(EXPORT_HEADER),)
-EXPORT_HEADER  := $(PRJROOT)/images/header
-endif
-EXTRA_CFLAGS   += -I$(EXPORT_HEADER)
+EXPORT_HEADER    := $(PRJROOT)/images/header/rg-sysmon
+MOD_INSTALL_PATH := $(ROOTFS_IMAGES)/lib/modules
 
 ifeq ("$(KBUILD_OUTPUT)", "")
 LINUX_KERNEL_PATH := /usr/src/linux-headers-$(shell uname -r)
 KBUILD_OUTPUT := $(LINUX_KERNEL_PATH)
 ROOTFS_IMAGES := $(CURDIR)/rootfs
+.PHONY: all
+all: build
 endif
-
-MOD_INSTALL_PATH := $(ROOTFS_IMAGES)/lib/modules
 
 .PHONY: install
 install: build
+	install -m0755 -d $(EXPORT_HEADER)
 	install -m0755 -d $(MOD_INSTALL_PATH)
-	install -m0755 -t $(MOD_INSTALL_PATH) $(mod_name).ko
+	install -m0644 -t $(EXPORT_HEADER) monitor_path.h
+	install -m0644 -t $(MOD_INSTALL_PATH) $(mod_name).ko
+ifeq ($(SYSMON_PLATFORM_EU),)
 	install -m0755 -d $(ROOTFS_IMAGES)/lib/systemd/system
-	install -m0644 -t $(ROOTFS_IMAGES)/lib/systemd/system read_proc.service
 	install -m0755 -d $(ROOTFS_IMAGES)/etc/systemd/system/multi-user.target.wants
-	@rm -f $(ROOTFS_IMAGES)/etc/systemd/system/multi-user.target.wants/read_proc.service
-	ln -s /lib/systemd/system/read_proc.service \
-	    $(ROOTFS_IMAGES)/etc/systemd/system/multi-user.target.wants/read_proc.service
+	install -m0644 -t $(ROOTFS_IMAGES)/lib/systemd/system scripts/$(mod_name).service
+	ln -sf /lib/systemd/system/$(mod_name).service \
+	    $(ROOTFS_IMAGES)/etc/systemd/system/multi-user.target.wants/$(mod_name).service
+else
+	install -m0755 -d $(ROOTFS_IMAGES)/etc/rc.d/rc3.d
+	install -m0755 -t $(ROOTFS_IMAGES)/etc/rc.d/rc3.d scripts/S01-proc_monitor
+endif
 
 .PHONY: build
-build: clean
-	$(MAKE) -j4 -C $(KBUILD_OUTPUT) M=$(CURDIR) modules
+build:
+	$(MAKE) -C $(KBUILD_OUTPUT) M=$(CURDIR) clean
+	$(MAKE) -C $(KBUILD_OUTPUT) M=$(CURDIR) modules
 
-.PHONY: clean
-clean:
-	$(MAKE) -j4 -C $(KBUILD_OUTPUT) M=$(CURDIR) clean
-
-.PHONY: insmod
+.PHONY: insmod rmmod
 insmod:
-	@sudo insmod $(MOD_INSTALL_PATH)/$(mod_name).ko process_hash_size=128 thread_hash_size=128
-
-.PHONY: rmmod
+	sudo insmod $(mod_name).ko process_hash_size=289 thread_hash_size=560
 rmmod:
-	@sudo rmmod $(mod_name)
+	sudo rmmod $(mod_name)

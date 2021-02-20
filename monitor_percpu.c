@@ -50,7 +50,7 @@ static struct cpu_stat_value *cpu_stat = NULL;
 u64 cpu_delta_tick(const unsigned int cpu)
 {
     if (unlikely(cpu >= cpu_stat->ncore)) {
-        printk(KERN_ERR "MONITOR BUG: request cpu(%u), but only has %u cpu cores!", cpu,
+        printk(KERN_ERR "proc monitor BUG: request cpu(%u), but only has %u cpu cores!\n", cpu,
             cpu_stat->ncore);
         return 0;
     }
@@ -241,7 +241,7 @@ int __init cpu_stat_init(void)
 
     entry_root = monitor_proc_fs_entry(MONITOR_PROC_FS_ENTRY_CPU_ROOT);
     if (unlikely(!entry_root)) {
-        printk(KERN_ERR "get monitor entry of cpu root fail!");
+        printk(KERN_ERR "get monitor entry of cpu root fail!\n");
         return -EINVAL;
     }
 
@@ -249,7 +249,7 @@ int __init cpu_stat_init(void)
     size = ncore * sizeof(cpu_stat->core[0]) + sizeof(*cpu_stat);
     cpu_stat = kmalloc(size, GFP_KERNEL);
     if (unlikely(!cpu_stat)) {
-        printk(KERN_ERR "MONITOR: kmalloc fail for cpu stat!");
+        printk(KERN_ERR "proc monitor: kmalloc fail for cpu stat!\n");
         return -EINVAL;
     }
 
@@ -304,7 +304,7 @@ int __init cpu_stat_init(void)
 
     return 0;
 err:
-    printk(KERN_ERR "MONITOR: create %s fail!", path);
+    printk(KERN_ERR "proc monitor: create %s fail!\n", path);
     cpu_stat_exit();
     return -EINVAL;
 }

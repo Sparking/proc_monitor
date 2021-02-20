@@ -6,7 +6,10 @@
 #include <linux/init_task.h>
 #include <uapi/linux/sched.h>
 #include <linux/sched/signal.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
 #include <linux/sched/cputime.h>
+#endif
 #include "proc_fs.h"
 #include "history.h"
 #include "hash_table.h"
@@ -101,7 +104,11 @@ static void get_task_mem(struct process_memory_info *__restrict vm, struct mm_st
     vm->rss = MM_CONV_DEC(total_rss);
     vm->swap = MM_CONV_DEC(get_mm_counter(mm, MM_SWAPENTS));
     vm->text = text >> 10;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
     vm->data = MM_CONV_DEC(mm->data_vm);
+#else
+    vm->data = MM_CONV_DEC(mm->total_vm - mm->shared_vm - mm->stack_vm);
+#endif
     vm->stack = MM_CONV_DEC(mm->stack_vm);
     vm->lib = lib >> 10;
 #undef MM_CONV_DEC
@@ -155,8 +162,13 @@ static void monitor_task_init_common(struct task_struct *__restrict task,
     t->state = task_state_to_char(task);
     t->task_id = task_pid_nr(task);
     t->cpu_running = task_cpu(task);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
     t->cpu_allowed = *task->cpus_ptr;
     t->start_time = task->start_time;
+#else
+    t->cpu_allowed = *tsk_cpus_allowed(task);
+    t->start_time = (unsigned long long) task->real_start_time.tv_sec;
+#endif
     strncpy(t->comm, task->comm, sizeof(t->comm));
 }
 
@@ -193,6 +205,8 @@ static inline struct monitor_task *monitor_task_create_node(const bool is_ps)
 
 void task_stat_update(void)
 {
+    int nps;
+    int nth;
     pid_t id;
     pid_t main_thread_id;
     struct monitor_task *t;
@@ -203,6 +217,9 @@ void task_stat_update(void)
 
     write_lock(&task_rwlock);   /* rcu锁放置于内部, hash表的锁可能会陷入等待 */
     rcu_read_lock();
+
+    nps = 0;
+    nth = 0;
     for_each_process(process) {
         main_thread_id = task_pid_nr(process);
         t_node = dual_hash_table_find_last(process_hash_table, main_thread_id);
@@ -212,7 +229,7 @@ void task_stat_update(void)
         } else {
             t = monitor_task_create_node(true);
             if (unlikely(!t)) {
-                printk(KERN_ERR "MONITOR: no memory for new process node!");
+                printk(KERN_ERR "proc monitor: no memory for new process node!\n");
                 goto out;
             }
 
@@ -220,6 +237,7 @@ void task_stat_update(void)
             t_node = &t->node;
         }
 
+        nps++;
         ps = (struct monitor_process *) t->private;
         ps->nthreads = 0;
         monitor_task_update_memory_history(process, ps);
@@ -233,7 +251,7 @@ void task_stat_update(void)
             } else {
                 t = monitor_task_create_node(false);
                 if (unlikely(!t)) {
-                    printk(KERN_ERR "MONITOR: no memory for new thread node!");
+                    printk(KERN_ERR "proc monitor: no memory for new thread node!\n");
                     goto out;
                 }
 
@@ -244,6 +262,7 @@ void task_stat_update(void)
             monitor_task_update_cpu_history(thread, (struct monitor_thread *) t->private);
             dual_hash_table_add_using(thread_hash_table, t_node);
             ps->nthreads++;
+            nth++;
         }
     }
 out:
@@ -262,28 +281,25 @@ static unsigned int task_get_id(const struct hlist_node *__restrict node)
 
 static void realse_task(struct hlist_node *__restrict node)
 {
-    struct monitor_task *t;
+    struct monitor_task *task;
 
-    t = hlist_entry(node, struct monitor_task, node);
-    printk(KERN_DEBUG "free node %u\n", t->task_id);
+    task = hlist_entry(node, struct monitor_task, node);
 
-    kfree(t);
+    kfree(task);
 }
 
 static void show_ps_hist(struct hlist_node *__restrict node, struct seq_file *__restrict p,
-            void *__restrict v)
+                void *__restrict v)
 {
     struct monitor_task *task;
-    unsigned long off;
 
     task = hlist_entry(node, struct monitor_task, node);
-    off = (unsigned long) v;
     seq_printf(p, "%d ", task->task_id);
-    show_history_record(p, (vsmall_ring_buffer_t *) ((void *) task + off));
+    show_history_record(p, (vsmall_ring_buffer_t *) ((void *) task + (unsigned long) v));
 }
 
 static void show_thread_hist(struct hlist_node *__restrict node, struct seq_file *__restrict p,
-            void *__restrict v)
+                void *__restrict v)
 {
     struct monitor_task *task;
 
@@ -363,8 +379,8 @@ int __init task_stat_init(void)
     struct proc_dir_entry *entry;
 
     if (!process_hash_size || !thread_hash_size) {
-        printk(KERN_ERR "MONITOR: hash size invalid(process: %u, thread: %u)", process_hash_size,
-            thread_hash_size);
+        printk(KERN_ERR "proc monitor: hash size invalid(process: %u, thread: %u)\n",
+            process_hash_size, thread_hash_size);
         return -EINVAL;
     }
 
@@ -372,20 +388,25 @@ int __init task_stat_init(void)
     ret = -ENOMEM;
     process_hash_table = dual_hash_table_create(process_hash_size, task_get_id, realse_task);
     if (!process_hash_table) {
-        printk(KERN_ERR "MONITOR: create process hash table fail!");
+        printk(KERN_ERR "proc monitor: create process hash table fail!\n");
         goto create_hash_fail_out;
     }
+    printk(KERN_DEBUG "proc monitor: hash table - type process, param %u, actual %u\n",
+        process_hash_size, process_hash_table->index_mask + 1);
 
     thread_hash_table = dual_hash_table_create(thread_hash_size, task_get_id, realse_task);
     if (!thread_hash_table) {
-        printk(KERN_ERR "MONITOR: create thread hash table fail!");
+        printk(KERN_ERR "proc monitor: create thread hash table fail!\n");
         goto create_hash_fail_out;
     }
+    printk(KERN_DEBUG "proc monitor: hash table - type thread, param %u, actual %u\n",
+        thread_hash_size,
+        thread_hash_table->index_mask + 1);
 
     ret = -EINVAL;
     entry_root = monitor_proc_fs_entry(MONITOR_PROC_FS_ENTRY_PROCESS_ROOT);
     if (!entry_root) {
-        printk(KERN_ERR "MONITOR: get process proc entry failed!");
+        printk(KERN_ERR "proc monitor: get process proc entry failed!\n");
         goto create_hash_fail_out;
     }
 
@@ -426,7 +447,7 @@ int __init task_stat_init(void)
 
     entry_root = monitor_proc_fs_entry(MONITOR_PROC_FS_ENTRY_THREAD_ROOT);
     if (!entry_root) {
-        printk(KERN_ERR "MONITOR: get thread proc entry failed!");
+        printk(KERN_ERR "proc monitor: get thread proc entry failed!\n");
         goto create_hash_fail_out;
     }
 
@@ -468,7 +489,7 @@ int __init task_stat_init(void)
     return 0;
 
 create_proc_data_failed:
-    printk(KERN_ERR "MONITOR: create %s fail!", path);
+    printk(KERN_ERR "proc monitor: create %s fail!\n", path);
 create_hash_fail_out:
     task_stat_exit();
     return ret;
